@@ -151,9 +151,9 @@ export function TypingDisplay({
         })}
       </div>
 
-      {/* Fade overlay at top for scrolled content */}
+      {/* Fade overlay at top for scrolled content - subtle fade that doesn't obscure active line */}
       {hasScrolled && (
-        <div className="absolute top-0 left-0 right-0 h-6 bg-gradient-to-b from-background to-transparent pointer-events-none" />
+        <div className="absolute top-0 left-0 right-0 h-3 bg-gradient-to-b from-background via-background/50 to-transparent pointer-events-none" />
       )}
 
       {/* Fade overlay at bottom */}
