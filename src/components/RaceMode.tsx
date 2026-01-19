@@ -125,33 +125,44 @@ export function RaceMode({ initialCode }: RaceModeProps) {
   const calculateProgressAndWpm = useCallback(() => {
     const totalChars = raceText.join(' ').length;
     let typedChars = 0;
+    let correctChars = 0;
     
-    for (let i = 0; i < currentWordIndexRef.current; i++) {
-      typedChars += raceText[i].length + 1; // +1 for space
+    // Count characters in completed words
+    for (let i = 0; i < currentWordIndexRef.current && i < wordsRef.current.length; i++) {
+      const word = wordsRef.current[i];
+      if (!word) continue;
+      typedChars += word.original.length + 1; // +1 for space
+      
+      // Count correct characters for WPM
+      for (const charState of word.characters) {
+        if (charState.status === 'correct') {
+          correctChars++;
+        }
+      }
+      correctChars++; // Add space as correct for completed words
     }
-    typedChars += currentCharIndexRef.current;
-
-    const progress = totalChars > 0 ? (typedChars / totalChars) * 100 : 0;
     
+    // Add characters from current word
+    typedChars += currentCharIndexRef.current;
+    
+    // Count correct characters in current word for WPM
+    const currentWord = wordsRef.current[currentWordIndexRef.current];
+    if (currentWord) {
+      for (let i = 0; i < currentWord.characters.length && i < currentWord.original.length; i++) {
+        if (currentWord.characters[i]?.status === 'correct') {
+          correctChars++;
+        }
+      }
+    }
+
+    // Progress is based on typed characters (position in text)
+    const progress = totalChars > 0 ? Math.min((typedChars / totalChars) * 100, 100) : 0;
+    
+    // WPM is based on correct characters only
     let wpm = 0;
     if (startTime) {
       const elapsedMinutes = (Date.now() - startTime) / 60000;
       if (elapsedMinutes > 0) {
-        // Count correct characters
-        let correctChars = 0;
-        for (let i = 0; i <= currentWordIndexRef.current && i < wordsRef.current.length; i++) {
-          const word = wordsRef.current[i];
-          if (!word) continue;
-          for (const charState of word.characters) {
-            if (charState.status === 'correct') {
-              correctChars++;
-            }
-          }
-          // Add space for completed words
-          if (i < currentWordIndexRef.current) {
-            correctChars++;
-          }
-        }
         wpm = Math.round((correctChars / 5) / elapsedMinutes);
       }
     }
@@ -176,7 +187,7 @@ export function RaceMode({ initialCode }: RaceModeProps) {
     return () => clearInterval(interval);
   }, [raceStatus, hasFinished, calculateProgressAndWpm, updateProgress, startTime]);
 
-  // Handle key press
+  // Handle key press - matches solo mode behavior exactly
   const handleKeyPress = useCallback((key: string) => {
     if (raceStatus !== 'racing' || hasFinishedRef.current) return;
 
@@ -191,14 +202,17 @@ export function RaceMode({ initialCode }: RaceModeProps) {
     // Handle backspace
     if (key === 'Backspace') {
       if (charIdx > 0) {
+        // Delete character in current word
         const newCharIdx = charIdx - 1;
         const word = currentWords[wordIdx];
         const newWords = [...currentWords];
         const newWord = { ...word };
 
         if (newCharIdx >= word.original.length) {
+          // Remove extra character
           newWord.characters = word.characters.slice(0, -1);
         } else {
+          // Reset character to pending
           newWord.characters = [...word.characters];
           newWord.characters[newCharIdx] = {
             char: word.original[newCharIdx],
@@ -214,6 +228,7 @@ export function RaceMode({ initialCode }: RaceModeProps) {
         setWords(newWords);
         setCurrentCharIndex(newCharIdx);
       } else if (wordIdx > 0) {
+        // Go back to previous word
         const prevWordIdx = wordIdx - 1;
         const prevWord = currentWords[prevWordIdx];
         const newCharIdx = prevWord.typed.length;
@@ -226,13 +241,13 @@ export function RaceMode({ initialCode }: RaceModeProps) {
       return;
     }
 
-    // Handle space
+    // Handle space - move to next word
     if (key === ' ') {
-      if (charIdx === 0) return;
+      if (charIdx === 0) return; // Don't move if nothing typed
 
       // Check if this is the last word
       if (wordIdx >= raceText.length - 1) {
-        // Finished!
+        // Finished the race!
         hasFinishedRef.current = true;
         setHasFinished(true);
         const { wpm } = calculateProgressAndWpm();
@@ -252,7 +267,7 @@ export function RaceMode({ initialCode }: RaceModeProps) {
       return;
     }
 
-    // Handle regular character
+    // Handle regular character input (ignore non-printable)
     if (key.length !== 1) return;
 
     const word = currentWords[wordIdx];
@@ -261,6 +276,7 @@ export function RaceMode({ initialCode }: RaceModeProps) {
     newWord.characters = [...word.characters];
 
     if (charIdx < word.original.length) {
+      // Normal character within word
       const expected = word.original[charIdx];
       const isCorrect = key === expected;
       newWord.characters[charIdx] = {
@@ -268,6 +284,7 @@ export function RaceMode({ initialCode }: RaceModeProps) {
         status: isCorrect ? 'correct' : 'incorrect'
       };
     } else {
+      // Extra character
       newWord.characters.push({
         char: key,
         status: 'extra'
